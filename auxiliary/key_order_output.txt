@@ -1,0 +1,145 @@
+Found 72 unique key order(s) for key 'AVENIMANAILUYI':
+[0, 6, 8, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJEIBKCFHLNG'
+[0, 6, 8, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKEIBJCFHLNG'
+[0, 6, 8, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJEIBKCGHLNF'
+[0, 6, 8, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKEIBJCGHLNF'
+[0, 6, 8, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJFIBKCEHLNG'
+[0, 6, 8, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKFIBJCEHLNG'
+[0, 6, 8, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJGIBKCEHLNF'
+[0, 6, 8, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKGIBJCEHLNF'
+[0, 6, 8, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJFIBKCGHLNE'
+[0, 6, 8, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKFIBJCGHLNE'
+[0, 6, 8, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJGIBKCFHLNE'
+[0, 6, 8, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKGIBJCFHLNE'
+[0, 8, 6, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJEICKBFHLNG'
+[0, 8, 6, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKEICJBFHLNG'
+[0, 8, 6, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJEICKBGHLNF'
+[0, 8, 6, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKEICJBGHLNF'
+[0, 8, 6, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJFICKBEHLNG'
+[0, 8, 6, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKFICJBEHLNG'
+[0, 8, 6, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJGICKBEHLNF'
+[0, 8, 6, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKGICJBEHLNF'
+[0, 8, 6, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJFICKBGHLNE'
+[0, 8, 6, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKFICJBGHLNE'
+[0, 8, 6, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'AMDJGICKBFHLNE'
+[0, 8, 6, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'AMDKGICJBFHLNE'
+[6, 0, 8, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJEIAKCFHLNG'
+[6, 0, 8, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKEIAJCFHLNG'
+[6, 0, 8, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJEIAKCGHLNF'
+[6, 0, 8, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKEIAJCGHLNF'
+[6, 0, 8, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJFIAKCEHLNG'
+[6, 0, 8, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKFIAJCEHLNG'
+[6, 0, 8, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJGIAKCEHLNF'
+[6, 0, 8, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKGIAJCEHLNF'
+[6, 0, 8, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJFIAKCGHLNE'
+[6, 0, 8, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKFIAJCGHLNE'
+[6, 0, 8, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJGIAKCFHLNE'
+[6, 0, 8, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKGIAJCFHLNE'
+[6, 8, 0, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJEIAKBFHLNG'
+[6, 8, 0, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKEIAJBFHLNG'
+[6, 8, 0, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJEIAKBGHLNF'
+[6, 8, 0, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKEIAJBGHLNF'
+[6, 8, 0, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJFIAKBEHLNG'
+[6, 8, 0, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKFIAJBEHLNG'
+[6, 8, 0, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJGIAKBEHLNF'
+[6, 8, 0, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKGIAJBEHLNF'
+[6, 8, 0, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJFIAKBGHLNE'
+[6, 8, 0, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKFIAJBGHLNE'
+[6, 8, 0, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJGIAKBFHLNE'
+[6, 8, 0, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKGIAJBFHLNE'
+[8, 0, 6, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJEICKAFHLNG'
+[8, 0, 6, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKEICJAFHLNG'
+[8, 0, 6, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJEICKAGHLNF'
+[8, 0, 6, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKEICJAGHLNF'
+[8, 0, 6, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJFICKAEHLNG'
+[8, 0, 6, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKFICJAEHLNG'
+[8, 0, 6, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJGICKAEHLNF'
+[8, 0, 6, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKGICJAEHLNF'
+[8, 0, 6, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJFICKAGHLNE'
+[8, 0, 6, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKFICJAGHLNE'
+[8, 0, 6, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'BMDJGICKAFHLNE'
+[8, 0, 6, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'BMDKGICJAFHLNE'
+[8, 6, 0, 2, 4, 9, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJEIBKAFHLNG'
+[8, 6, 0, 2, 4, 9, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKEIBJAFHLNG'
+[8, 6, 0, 2, 4, 13, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJEIBKAGHLNF'
+[8, 6, 0, 2, 4, 13, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKEIBJAGHLNF'
+[8, 6, 0, 2, 9, 4, 13, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJFIBKAEHLNG'
+[8, 6, 0, 2, 9, 4, 13, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKFIBJAEHLNG'
+[8, 6, 0, 2, 9, 13, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJGIBKAEHLNF'
+[8, 6, 0, 2, 9, 13, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKGIBJAEHLNF'
+[8, 6, 0, 2, 13, 4, 9, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJFIBKAGHLNE'
+[8, 6, 0, 2, 13, 4, 9, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKFIBJAGHLNE'
+[8, 6, 0, 2, 13, 9, 4, 10, 5, 3, 7, 11, 1, 12]
+Encoded key letters: 'CMDJGIBKAFHLNE'
+[8, 6, 0, 2, 13, 9, 4, 10, 5, 7, 3, 11, 1, 12]
+Encoded key letters: 'CMDKGIBJAFHLNE'
