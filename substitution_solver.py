@@ -33,11 +33,8 @@ MONOGRAM_FILE = os.path.join(
 )
 
 
-# Alternative fix: add a simpler direct search method
 def _process_worker_run_v(args):
-    """
-    Simpler worker that does local search + polish without recursion.
-    """
+    """Worker that does local search + polish without recursion."""
     (
         symbols,
         initial_alpha,
@@ -60,9 +57,8 @@ def _process_worker_run_v(args):
                     rng=random.Random(seed_int),
                     debug=debug,
                     workers=0,
-                    fix_digits=fix_digits,  # Honor the user's setting
+                    fix_digits=fix_digits,
                 )
-                # Direct local search without spawning
                 current = opt._normalize_alpha(initial_alpha)
                 current = opt._local_search(
                     current, evaluate, iterations=max_iterations
@@ -77,7 +73,7 @@ def _process_worker_run_v(args):
                 rng=random.Random(seed_int),
                 debug=debug,
                 workers=0,
-                fix_digits=fix_digits,  # Honor the user's setting
+                fix_digits=fix_digits,
             )
             current = opt._normalize_alpha(initial_alpha)
             current = opt._local_search(current, evaluate, iterations=max_iterations)
@@ -124,11 +120,9 @@ class AlphabetOptimizer:
         self.workers = workers
         self.fix_digits = bool(fix_digits)
 
-        # store language as instance-level attribute (no module-global mutation)
         self.language = language.upper() if language.upper() in ("EN", "DE") else "EN"
         lang = "german" if self.language == "DE" else "english"
 
-        # compute instance resource file paths (used by this optimizer instance only)
         base = os.path.dirname(__file__)
         self.DICT_ALPHA = os.path.join(
             base, "auxiliary", f"{lang}_dictionary_alpha.txt"
@@ -140,29 +134,19 @@ class AlphabetOptimizer:
         self.TRIGRAM_FILE = os.path.join(base, "auxiliary", f"{lang}_trigrams.txt")
         self.BIGRAM_FILE = os.path.join(base, "auxiliary", f"{lang}_bigrams.txt")
         self.MONOGRAM_FILE = os.path.join(base, "auxiliary", f"{lang}_monograms.txt")
-        # keep compatibility with existing module-level constants if other code expects them,
-        # but do not mutate them here — instance uses self.* paths.
 
-        # Partition letters and digits
         self._letters = [c for c in symbols if c.isalpha()]
         self._digits = [c for c in symbols if c.isdigit()]
         self.letter_count = len(self._letters)
         self.symbol_count = len(symbols)
         self._digits_str = "".join(self._digits)
 
-        # NEW: how many positions we actually permute/optimize
-        # if fix_digits True we behave like before (letters-only prefix),
-        # otherwise we allow all symbols to be permuted.
         self.optimize_n = self.letter_count if self.fix_digits else self.symbol_count
 
-        # Caches
         self._eval_cache: Dict[Alphabet, float] = {}
         self._decode_cache: Dict[Alphabet, Tuple[float, List[str]]] = {}
         self._score_cache: Dict[Alphabet, Tuple[float, str]] = {}
 
-        # Load language resources (n-grams and dictionaries) from instance paths
-        # load using instance paths (methods read the instance attributes)
-        # Ensure n-gram log tables are available on the instance for scoring
         self._quadgram_log, self._quadgram_floor = self._load_ngrams(
             getattr(self, "QUADGRAM_FILE", QUADGRAM_FILE), 4
         )
@@ -179,16 +163,12 @@ class AlphabetOptimizer:
         self._common_words = self._load_common_words()
         self._dictionary_patterns = self._build_dictionary_patterns()
 
-        # Frequency-based symbol ranking for CSP
         freq_rank = "ETAOINSHRDLCUMWFGYPBVKJXQZ"
         self._symbol_rank = {c: i for i, c in enumerate(freq_rank)}
         for c in self._letters:
             self._symbol_rank.setdefault(c, len(self._symbol_rank))
 
-        # NEW: Track all global best results
-        self._global_best_history: List[Tuple[float, Alphabet, str]] = (
-            []
-        )  # (score, alphabet, sample)
+        self._global_best_history: List[Tuple[float, Alphabet, str]] = []
 
     def search(
         self,
@@ -198,14 +178,7 @@ class AlphabetOptimizer:
         max_iterations: int = 2000,
         **kwargs,
     ) -> Tuple[Alphabet, float]:
-        """Main search using constraint-driven approach.
-
-        This implementation launches multiple independent worker processes,
-        each performing one 'restart' starting from an initial alphabet.
-        The best result across workers is returned and all worker results are
-        appended to _global_best_history for inspection.
-        """
-        # NEW: If workers=0, run direct single-threaded search
+        """Main search using constraint-driven approach with parallel workers."""
         if self.workers == 0:
             if self.debug:
                 print("[DIRECT] Running single-threaded search (workers=0)")
@@ -216,31 +189,24 @@ class AlphabetOptimizer:
             self._global_best_history.append((score, current, sample))
             return current, score
 
-        # Reset caches/history
         self._eval_cache.clear()
         self._decode_cache.clear()
         self._score_cache.clear()
         self._global_best_history.clear()
 
-        # Prepare initial seeds (include canonical seeds + provided initial)
         seeds = self._generate_seed_alphabets(initial, evaluate)
 
-        # Build the list of initial alphabets to try (one per external 'restart')
         initials: List[Alphabet] = []
         if restarts <= 0:
             restarts = max(1, len(seeds))
-        # Use available seeds first
         for s in seeds:
             if len(initials) >= restarts:
                 break
             initials.append(self._normalize_alpha(s))
-        # Fill remaining with random alphabets
         while len(initials) < restarts:
             initials.append(self._random_alpha())
 
         if self.debug:
-            # max_workers is computed later (depends on worker_args length),
-            # avoid referencing it before it's defined.
             print(f"[SEARCH] Starting search with {restarts} restarts")
 
         worker_args = []
@@ -251,7 +217,7 @@ class AlphabetOptimizer:
                     self.symbols,
                     init_alpha,
                     evaluate,
-                    1,  # worker-internal restarts (this external restart maps to one process run)
+                    1,
                     max_iterations,
                     self.debug,
                     self.fix_digits,
@@ -259,7 +225,6 @@ class AlphabetOptimizer:
                 )
             )
 
-        # Run workers in a process pool and collect results
         results: List[Tuple[float, Alphabet, str]] = []
         max_workers = min(self.workers or 1, len(worker_args) or 1)
 
@@ -268,8 +233,6 @@ class AlphabetOptimizer:
                 f"[SEARCH] Prepared {len(worker_args)} worker tasks, using max_workers={max_workers}"
             )
 
-        # If only one worker requested, run worker tasks inline to avoid pickling issues.
-        # This helps when evaluators/decoders are not fully pickleable.
         if max_workers <= 1:
             if self.debug:
                 print(f"[SEARCH] Running inline (max_workers={max_workers})")
@@ -293,13 +256,11 @@ class AlphabetOptimizer:
                         "",
                         "",
                     )
-                # normalize result before recording
                 try:
                     alpha_norm = self._normalize_alpha(alpha)
                 except Exception:
                     alpha_norm = alpha
                 results.append((score, alpha_norm, sample))
-                # record in global-best history
                 self._global_best_history.append((score, alpha_norm, sample))
                 if self.debug and worker_log:
                     print(f"[WORKER-LOG]\n{worker_log}", flush=True)
@@ -326,13 +287,11 @@ class AlphabetOptimizer:
                             "",
                             "",
                         )
-                    # normalize result before recording
                     try:
                         alpha_norm = self._normalize_alpha(alpha)
                     except Exception:
                         alpha_norm = alpha
                     results.append((score, alpha_norm, sample))
-                    # record in global-best history
                     self._global_best_history.append((score, alpha_norm, sample))
                     if self.debug and worker_log:
                         print(f"[WORKER-LOG]\n{worker_log}", flush=True)
@@ -340,9 +299,7 @@ class AlphabetOptimizer:
         if self.debug:
             print(f"[SEARCH] Collected {len(results)} results")
 
-        # Choose best
         if not results:
-            # fallback to canonical alphabet
             best_alpha = self.canonical_alphabet
             best_score = float("-inf")
         else:
@@ -355,11 +312,7 @@ class AlphabetOptimizer:
             if best_sample:
                 print(f"[GLOBAL-BEST] Sample: {best_sample[:150]}...")
 
-        # NEW: If digits movable, ensure letters are optimized first, then assign digits greedily
         if not self.fix_digits:
-            # The worker processes already optimized with fix_digits internally set,
-            # so best_alpha has letters in good positions and digits may be suboptimal.
-            # Now re-assign all 10 digit positions greedily to maximize score.
             try:
                 if self.debug:
                     print(
@@ -386,7 +339,6 @@ class AlphabetOptimizer:
 
     def get_top_alphabets(self, n: int = 5) -> List[Tuple[float, Alphabet, str]]:
         """Return top N alphabets from search history."""
-        # Sort by score descending, remove duplicates by alphabet
         seen_alphas = set()
         unique_results = []
 
@@ -469,7 +421,6 @@ class AlphabetOptimizer:
     ) -> Alphabet:
         """Refine seed using constraint satisfaction and local search."""
         alpha = self._normalize_alpha(seed)
-
         mapping = self._build_partial_mapping(alpha, evaluate)
 
         candidate = None
@@ -503,12 +454,11 @@ class AlphabetOptimizer:
     def _local_search(
         self, seed: Alphabet, evaluate: ScoreFn, iterations: int = 1000
     ) -> Alphabet:
-        """Simple hill-climbing local search over the mutable prefix (letters or full symbols)."""
+        """Hill-climbing local search over the mutable prefix."""
         current = self._normalize_alpha(seed)
         best_score, _ = self._score_alphabet(current, evaluate)
 
         for _ in range(iterations):
-            # choose indices inside the mutable prefix
             if self.rng.random() < 0.3:
                 if self.optimize_n <= 2:
                     continue
@@ -530,14 +480,13 @@ class AlphabetOptimizer:
     def _deterministic_swap_polish(
         self, alpha: Alphabet, evaluate: ScoreFn, max_passes: int = 3
     ) -> Alphabet:
-        """Exhaustive pairwise swap polishing over the mutable prefix (uses rebuild helper)."""
+        """Exhaustive pairwise swap polishing over the mutable prefix."""
         best_alpha = self._normalize_alpha(alpha)
         best_score, _ = self._score_alphabet(best_alpha, evaluate)
 
         for _ in range(max_passes):
             improved = False
 
-            # iterate over mutable prefix positions
             for i in range(self.optimize_n - 1):
                 for j in range(i + 1, self.optimize_n):
                     candidate = self._swap_letters(best_alpha, i, j)
@@ -565,10 +514,9 @@ class AlphabetOptimizer:
     ) -> Alphabet:
         """Try small permutations on problematic positions inside the mutable prefix."""
         baseline_score, _ = self._score_alphabet(alpha, evaluate)
-        prefix = self._prefix(alpha)  # list of mutable symbols
+        prefix = self._prefix(alpha)
         n = len(prefix)
 
-        # Find problematic positions in the prefix
         problematic: Set[int] = set()
         for i in range(max(0, n - 1)):
             swapped = self._swap_letters(alpha, i, i + 1)
@@ -579,7 +527,7 @@ class AlphabetOptimizer:
         if not problematic:
             problematic.update(range(min(4, n)))
 
-        idx_list = sorted(problematic)[:6]  # limit to small set
+        idx_list = sorted(problematic)[:6]
         if not idx_list:
             return alpha
 
@@ -591,7 +539,6 @@ class AlphabetOptimizer:
         max_perms = 5000 if len(idx_list) <= 6 else 2000
         checked = 0
 
-        # Try permutations of the selected prefix indices and rebuild full alphabet
         for perm in itertools.permutations(remaining_symbols):
             checked += 1
             if checked > max_perms:
@@ -869,7 +816,6 @@ class AlphabetOptimizer:
     def _load_common_words(self) -> Set[str]:
         """Load common words for bonus scoring."""
 
-        # Accept an explicit path (instance-level) via self if available
         def _loader(filepath: Optional[str]) -> Set[str]:
             words = set()
             if filepath and os.path.isfile(filepath):
@@ -881,7 +827,6 @@ class AlphabetOptimizer:
                         if w and w.isalpha():
                             words.add(w)
             if not words:
-                # fallback hard-coded set
                 words = {
                     "THE",
                     "AND",
@@ -901,7 +846,6 @@ class AlphabetOptimizer:
                 }
             return words
 
-        # Use instance path when available, otherwise fall back to module-level COMMON_WORDS constant
         return _loader(getattr(self, "COMMON_WORDS_PATH", COMMON_WORDS))
 
     def _build_dictionary_patterns(self) -> Dict[str, List[str]]:
@@ -948,29 +892,18 @@ class AlphabetOptimizer:
 
         return "-".join(pattern)
 
-    # ---------- NEW: greedy digit assignment helper ----------
     def _assign_digits_greedy(self, alpha: Alphabet, evaluate: ScoreFn) -> Alphabet:
-        """
-        Fill digit slots when fix_digits=False.
-        - Identify positions in the alphabet that are not letters (these are digit slots).
-        - Greedily assign digits 0..9 to those slots to maximize score, ensuring uniqueness.
-        Returns a normalized 36-character alphabet.
-        """
-        # Work on a normalized base to ensure uniqueness
+        """Fill digit slots greedily when fix_digits=False."""
         base = self._normalize_alpha(alpha)
         chars = list(base)
-        # Find slots that should hold digits (positions where canonical symbol is a digit)
-        # We treat any position whose current char is not a letter as a digit-slot target.
         slots = [i for i, ch in enumerate(chars) if not ch.isalpha()]
         if not slots:
             return base
 
-        # Start with placeholders for slots
         for i in slots:
-            chars[i] = "?"  # will be replaced
+            chars[i] = "?"
 
         remaining_digits = list("0123456789")
-        # Greedy assignment: for each slot choose digit that yields best score
         for pos in slots:
             best_d = None
             best_sc = float("-inf")
@@ -978,7 +911,6 @@ class AlphabetOptimizer:
                 cand = chars.copy()
                 cand[pos] = d
                 cand_alpha = "".join(cand)
-                # normalize to ensure a proper permutation (keeps canonical order for remaining)
                 cand_alpha = self._normalize_alpha(cand_alpha)
                 sc, _ = self._score_alphabet(cand_alpha, evaluate)
                 if sc > best_sc:
@@ -990,39 +922,28 @@ class AlphabetOptimizer:
             remaining_digits.remove(best_d)
 
         final = "".join(chars)
-        # Final normalize to guarantee full unique alphabet returned
         return self._normalize_alpha(final)
 
     def _assign_all_digits_greedy(self, alpha: Alphabet, evaluate: ScoreFn) -> Alphabet:
-        """
-        Assign all 10 digits greedily when fix_digits=False.
-        Assumes the first 26 positions of alpha are letters (optimized by workers with fix_digits=True).
-        Tries each digit 0-9 in each of the remaining 10 positions to maximize score.
-        Returns a full 36-character alphabet.
-        """
-        # Normalize and extract the letter portion (first 26 chars)
+        """Assign all 10 digits greedily when fix_digits=False."""
         base = self._normalize_alpha(alpha)
-        letters_part = base[:26]  # Assume letters are in first 26 positions
+        letters_part = base[:26]
 
-        # Start with letters + canonical digit order, then optimize each digit position
         current = letters_part + "0123456789"
         current_score, _ = self._score_alphabet(current, evaluate)
 
         if self.debug:
             print(f"[DIGIT-ASSIGN] Starting: {current} score={current_score:.4f}")
 
-        # For each of the 10 digit positions (indices 26-35), try all 10 digits
         for pos in range(26, 36):
             best_digit = current[pos]
             best_score = current_score
 
-            # Try each digit 0-9 in this position
             for digit in "0123456789":
                 if digit == current[pos]:
-                    continue  # Already tried
-                # Check if digit is already used in another position
+                    continue
                 if digit in current[26:pos] or digit in current[pos + 1 : 36]:
-                    continue  # Skip duplicates
+                    continue
 
                 candidate = current[:pos] + digit + current[pos + 1 :]
                 score, _ = self._score_alphabet(candidate, evaluate)
@@ -1031,13 +952,9 @@ class AlphabetOptimizer:
                     best_score = score
                     best_digit = digit
 
-            # Commit best digit for this position
             if best_digit != current[pos]:
-                # Swap: move best_digit to pos, and current[pos] to where best_digit was
                 old_digit = current[pos]
-                swap_pos = current.index(
-                    best_digit, 26
-                )  # Find where best_digit currently is
+                swap_pos = current.index(best_digit, 26)
                 current = (
                     current[:pos]
                     + best_digit
@@ -1056,26 +973,20 @@ class AlphabetOptimizer:
 
         return self._normalize_alpha(current)
 
-    # Utility methods
-
-    # Helper: uniform way to get the "mutable prefix" of an alphabet (letters or full symbols)
     def _prefix(self, alpha: Alphabet) -> List[str]:
+        """Get the mutable prefix of an alphabet."""
         return list(alpha[: self.optimize_n])
 
-    # Helper: rebuild alphabet after changing the prefix
     def _rebuild_alpha_from_prefix(
         self, alpha: Alphabet, prefix_list: List[str]
     ) -> Alphabet:
-        # Always produce a full, unique 36-character alphabet.
-        # Use canonical symbol ordering to fill any remaining slots to avoid duplicates/missing symbols.
+        """Rebuild alphabet after changing the prefix."""
         prefix_set = set(prefix_list)
-        # Remaining symbols come from canonical order (self.symbols) and exclude those already in prefix.
         remaining = [c for c in self.symbols if c not in prefix_set]
-        # Combine prefix (exact order) and remaining canonical symbols
         return "".join(prefix_list) + "".join(remaining)
 
     def _swap_letters(self, alpha: Alphabet, i: int, j: int) -> Alphabet:
-        """Swap two mutable positions in the prefix (letters or full symbols)."""
+        """Swap two mutable positions in the prefix."""
         if i >= self.optimize_n or j >= self.optimize_n:
             return alpha
         p = self._prefix(alpha)
@@ -1085,23 +996,21 @@ class AlphabetOptimizer:
     def _micro_neighbors(
         self, alpha: Alphabet, sample_size: Optional[int] = None
     ) -> Iterable[Alphabet]:
+        """Generate micro-neighborhood of small swaps."""
         letters_part = self._prefix(alpha)
         neighbors = []
 
-        # Adjacent swaps (use prefix indices)
         for i in range(len(letters_part) - 1):
             p = letters_part.copy()
             p[i], p[i + 1] = p[i + 1], p[i]
             neighbors.append(self._rebuild_alpha_from_prefix(alpha, p))
 
-        # Small-distance swaps
         for i in range(min(15, len(letters_part))):
             for j in range(i + 2, min(i + 6, len(letters_part))):
                 p = letters_part.copy()
                 p[i], p[j] = p[j], p[i]
                 neighbors.append(self._rebuild_alpha_from_prefix(alpha, p))
 
-        # 3-cycles in front positions
         for i in range(min(12, len(letters_part) - 2)):
             for j in range(i + 1, min(i + 4, len(letters_part) - 1)):
                 for k in range(j + 1, min(j + 3, len(letters_part))):
@@ -1116,10 +1025,10 @@ class AlphabetOptimizer:
     def _macro_neighbors(
         self, alpha: Alphabet, sample_size: Optional[int] = None
     ) -> Iterable[Alphabet]:
+        """Generate macro-neighborhood of larger swaps."""
         letters_part = self._prefix(alpha)
         neighbors = []
 
-        # Larger swaps and permutations in the prefix
         for i in range(len(letters_part) - 1):
             for j in range(i + 1, len(letters_part)):
                 p = letters_part.copy()
@@ -1137,9 +1046,8 @@ class AlphabetOptimizer:
             return self.rng.sample(neighbors, sample_size)
         return neighbors
 
-    # _normalize_alpha must behave differently when digits are not fixed
     def _normalize_alpha(self, alpha: Alphabet) -> Alphabet:
-        """Normalize alphabet: when fix_digits=True keep letters-first then digits; otherwise preserve order and append missing symbols."""
+        """Normalize alphabet to ensure valid permutation."""
         seen = set()
         out = []
         for ch in alpha:
@@ -1147,29 +1055,23 @@ class AlphabetOptimizer:
                 out.append(ch)
                 seen.add(ch)
 
-        # Append any missing symbols in canonical order
         for ch in self.symbols:
             if ch not in seen:
                 out.append(ch)
                 seen.add(ch)
 
-        # If fix_digits is True ensure letters occupy the prefix (old behaviour)
         if self.fix_digits:
-            # Build letters-first canonical order then append digits
             letters_out = [ch for ch in out if ch.isalpha()]
             letters_out = letters_out[: self.letter_count]
             return "".join(letters_out) + self._digits_str
         else:
-            # preserve order across full alphabet
             return "".join(out[: self.symbol_count])
 
-    # _random_alpha: if digits movable, intersperse digits randomly
     def _random_alpha(self) -> Alphabet:
+        """Generate a random alphabet."""
         if self.fix_digits:
-            # simple, self-contained letter-first strategies (no external tier attributes)
             r = self.rng.random()
 
-            # 1) ETAOIN-ish ordering (high-probability structural seed)
             if r < 0.25:
                 letters = [
                     c for c in "ETAOINSHRDLCUMWFGYPBVKJXQZ" if c in self._letters
@@ -1177,7 +1079,6 @@ class AlphabetOptimizer:
                 missing = [c for c in self._letters if c not in letters]
                 letters.extend(missing)
 
-            # 2) Frequency-rank grouped shuffle: sort by symbol rank then shuffle within groups
             elif r < 0.6:
                 ranked = sorted(
                     self._letters, key=lambda c: self._symbol_rank.get(c, 999)
@@ -1188,21 +1089,17 @@ class AlphabetOptimizer:
                 self.rng.shuffle(low)
                 letters = top + mid + low
 
-            # 3) Fully random shuffle
             else:
                 letters = self._letters.copy()
                 self.rng.shuffle(letters)
 
             return "".join(letters[: self.letter_count]) + self._digits_str
         else:
-            # generate a letters ordering as before, then intersperse digits randomly across 36 positions
             letters = [c for c in "ETAOINSHRDLUCMFWYPBGVKJXQZ" if c in self._letters]
             missing = [c for c in self._letters if c not in letters]
             letters.extend(missing)
             self.rng.shuffle(letters)
-            # prepare symbol pool: letters + digits
             symbols = letters + self._digits.copy()
-            # shuffle entire symbol list to produce a full random alphabet
             self.rng.shuffle(symbols)
             return "".join(symbols[: self.symbol_count])
 
@@ -1240,11 +1137,9 @@ class NGramScoringEvaluator:
         self.word_weight = word_weight
         self.digit_penalty = digit_penalty
 
-        # store optional path and load common words (falls back to module-level COMMON_WORDS)
         self._common_words_path = common_words_path
         self.common_words = self._load_common_words()
 
-        # NEW: load trigram frequencies so evaluate() can use self.trigram_freqs
         def _load_ngrams_local(filepath: Optional[str], n: int):
             ngrams: Dict[str, int] = {}
             total = 0
@@ -1258,7 +1153,6 @@ class NGramScoringEvaluator:
                                 ngrams[gram] = ngrams.get(gram, 0) + cnt
                                 total += cnt
 
-            # fallback default small set when file missing or empty
             if not ngrams:
                 if n == 4:
                     ngrams = {"TION": 10587, "THER": 10010, "THAT": 8755}
@@ -1270,12 +1164,10 @@ class NGramScoringEvaluator:
                     ngrams = {"E": 120000, "T": 90000, "A": 80000}
                 total = sum(ngrams.values())
 
-            # convert to log-frequencies and floor (consistent with AlphabetOptimizer._load_ngrams)
             log_ngrams = {g: math.log10(c / total) for g, c in ngrams.items()}
             floor = math.log10(0.01 / total)
             return log_ngrams, floor
 
-        # load trigram log-frequencies (use module-level TRIGRAM_FILE fallback)
         self.trigram_freqs, self.trigram_floor = _load_ngrams_local(
             getattr(self, "_trigram_path", TRIGRAM_FILE), 3
         )
@@ -1295,25 +1187,21 @@ class NGramScoringEvaluator:
                 return {"THE", "AND", "TO", "OF", "A", "IN", "IS", "IT", "YOU"}
             return words
 
-        # If caller didn't pass a path, fall back to module-level COMMON_WORDS
         return _loader(getattr(self, "_common_words_path", COMMON_WORDS))
 
     def __call__(self, alpha: str) -> float:
         return self.evaluate(alpha)
 
     def evaluate(self, alpha: str) -> float:
-        # decode plaintexts using the base decoder
         base_score, plaintexts = self.base_decoder(alpha)
 
         if not plaintexts:
             return base_score
 
         combined = "".join(plaintexts).upper()
-
-        # Focus n-gram scoring on letters only (strip digits)
         letters_only = "".join(ch for ch in combined if ch.isalpha())
 
-        # Trigram scoring on letters-only text
+        # Trigram scoring
         trigram_score = 0.0
         count = 0
         for i in range(len(letters_only) - 2):
@@ -1323,7 +1211,7 @@ class NGramScoringEvaluator:
         if count > 0:
             trigram_score /= count
 
-        # Word scoring: strip digits from each token before lookup
+        # Word scoring
         words = []
         for w in combined.split():
             clean = "".join(ch for ch in w if ch.isalpha())
@@ -1332,37 +1220,27 @@ class NGramScoringEvaluator:
         word_hits = sum(1.0 for w in words if w in self.common_words)
         word_score = word_hits / max(1, len(words))
 
-        # NEW: Intra-word digit penalty (much stronger than overall digit ratio)
-        # Count how many times a digit appears surrounded by letters (e.g., "QUICK5ROWN")
+        # Intra-word digit penalty
         intra_word_digits = 0
         for i, ch in enumerate(combined):
             if ch.isdigit():
-                # Check if adjacent to any letter (left or right)
                 has_left_letter = i > 0 and combined[i - 1].isalpha()
                 has_right_letter = i < len(combined) - 1 and combined[i + 1].isalpha()
                 if has_left_letter or has_right_letter:
                     intra_word_digits += 1
 
-        # Overall digit penalty: proportion of non-letters in the combined stream
         total_chars = max(1, len(combined))
         digit_count = sum(1 for c in combined if c.isdigit())
         digit_ratio = digit_count / total_chars
 
-        # Apply CATASTROPHIC penalty for intra-word digits
-        # Each intra-word digit is worth -50.0 points (not normalized by length)
-        # This ensures even 1-2 intra-word digits completely dominate the score
         intra_word_penalty = -50.0 * intra_word_digits
-
-        # Moderate penalty for overall digit presence (less important than intra-word)
         overall_digit_penalty = -self.digit_penalty * 2.0 * digit_ratio
 
-        # Extra penalty if many digits present
         if digit_ratio > 0.05:
             overall_digit_penalty -= (digit_ratio - 0.05) * 10.0
 
         digit_score = intra_word_penalty + overall_digit_penalty
 
-        # Combine scores (weights chosen to prefer letter n-grams and words)
         return (
             base_score
             + self.trigram_weight * trigram_score
@@ -1379,7 +1257,6 @@ def wrap_score_with_ngram_scoring(
     common_words_path: Optional[str] = None,
 ) -> NGramScoringEvaluator:
     """Wrap decoder with n-gram scoring."""
-    # Pass optional common words path so callers (e.g. AlphabetOptimizer) can control language resources
     return NGramScoringEvaluator(
         base_decoder=base_decoder,
         trigram_weight=trigram_weight,

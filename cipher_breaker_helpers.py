@@ -10,20 +10,10 @@ from cipher_implementation import (
 
 def infer_fragment_seeding_variables(key_length: int) -> Dict[str, int]:
     """
-    Return a dictionary of fragment seeding and multi-phase search parameters
-    based on key length. This provides length-specific tuning for:
-    - Phase 1 (fragment seeding): total_seeds, restart_per_seed, max_iterations_per_seed
-    - Phase 2 (deeper search): best_candidates_phase_2, restarts_phase_2, max_iterations_phase_2
-    - Phase 3 (final refinement): best_candidates_phase_3, restarts, max_iterations
-    - ic_threshold: key-length specific IC threshold for early stopping
-
-    Args:
-        key_length: The columnar transposition key length
-
-    Returns:
-        Dictionary containing all phase-specific parameters including ic_threshold
+    Return fragment seeding and multi-phase search parameters based on key length.
+    Covers Phase 1 (fragment seeding), Phase 2 (deeper search), Phase 3 (final refinement),
+    and key-length specific IC thresholds.
     """
-    # Default baseline for lengths <= 17
     if key_length <= 14:
         return {
             # Phase 1: Fragment seeding
@@ -163,7 +153,7 @@ def infer_fragment_seeding_variables(key_length: int) -> Dict[str, int]:
 
 
 def set_config_helpers(cfg: Dict):
-    """Initialize module-level CONFIG (copy) so helpers use the same settings as caller."""
+    """Initialize module-level CONFIG so helpers use the same settings as caller."""
     global CONFIG
     if isinstance(cfg, dict):
         CONFIG = cfg.copy()
@@ -181,12 +171,12 @@ def compute_token_ic(tokens: List[str]) -> float:
 
 
 def get_bigrams(text: str) -> List[str]:
-    """Return overlapping consecutive bigrams (length-2 substrings)."""
+    """Return overlapping consecutive bigrams."""
     return [text[i : i + 2] for i in range(len(text) - 1)]
 
 
 def get_tetragrams(text: str) -> List[str]:
-    """Return overlapping consecutive tetragrams (length-4 substrings)."""
+    """Return overlapping consecutive tetragrams."""
     return [text[i : i + 4] for i in range(len(text) - 3)]
 
 
@@ -258,18 +248,18 @@ def position_entropy_score(fractionated: str) -> float:
 
 
 def generate_transformations(key_order: List[int]) -> List[Tuple[str, List[int]]]:
-    """Produce Lasry et al.'s transformation set given a key order list."""
+    """Produce Lasry et al.'s transformation set for hill-climbing."""
     m = len(key_order)
     transforms: List[Tuple[str, List[int]]] = []
 
-    # 1) Swap any two elements
+    # Swap any two elements
     for i in range(m):
         for j in range(i + 1, m):
             nk = key_order.copy()
             nk[i], nk[j] = nk[j], nk[i]
             transforms.append((f"SwapElements({i},{j})", nk))
 
-    # 2) Swap two consecutive segments of equal length
+    # Swap two consecutive segments of equal length
     for i in range(m):
         for L in range(1, (m - i) // 2 + 1):
             j = i + L
@@ -281,7 +271,7 @@ def generate_transformations(key_order: List[int]) -> List[Tuple[str, List[int]]
                 nk[j : j + L] = seg1
                 transforms.append((f"SwapSegments({i},{L},{j},{L})", nk))
 
-    # 3) Rotate a segment
+    # Rotate a segment
     for i in range(m):
         for L in range(2, m - i + 1):
             for k in range(1, L):
@@ -290,12 +280,12 @@ def generate_transformations(key_order: List[int]) -> List[Tuple[str, List[int]]
                 nk[i : i + L] = seg[k:] + seg[:k]
                 transforms.append((f"RotateSegment({i},{L},{k})", nk))
 
-    # 4) Reverse the whole key
+    # Reverse the whole key
     nk = key_order.copy()
     nk.reverse()
     transforms.append(("ReverseKey", nk))
 
-    # 5) Swap pairs
+    # Swap pairs
     if m >= 2:
         nk = key_order.copy()
         for i in range(0, m - 1, 2):
@@ -306,15 +296,10 @@ def generate_transformations(key_order: List[int]) -> List[Tuple[str, List[int]]
 
 
 def score_fragment_adjacency(left_frag: str, right_frag: str) -> float:
-    """
-    Score how well two column fragments fit adjacent to each other.
-    Uses overlapping bigrams across the boundary (interleaved pairs).
-    Higher score = better adjacency.
-    """
+    """Score how well two column fragments fit adjacent using interleaved bigrams."""
     if not left_frag or not right_frag:
         return 0.0
 
-    # Interleave characters from left and right fragments to form bigrams
     min_len = min(len(left_frag), len(right_frag))
     bigrams = []
     for i in range(min_len):
@@ -323,15 +308,11 @@ def score_fragment_adjacency(left_frag: str, right_frag: str) -> float:
     if len(bigrams) < 2:
         return 0.0
 
-    # Score using bigram IC
     return compute_token_ic(bigrams)
 
 
 def build_adjacency_matrix(fragments: List[str]) -> List[List[float]]:
-    """
-    Build an m×m adjacency weight matrix where entry [i][j]
-    represents the score for placing fragment j immediately after fragment i.
-    """
+    """Build m×m adjacency weight matrix for fragment ordering."""
     m = len(fragments)
     matrix = [[0.0] * m for _ in range(m)]
 
@@ -344,12 +325,7 @@ def build_adjacency_matrix(fragments: List[str]) -> List[List[float]]:
 
 
 def greedy_fragment_ordering(adjacency_matrix: List[List[float]]) -> List[int]:
-    """
-    Greedily construct a column ordering from adjacency weights.
-    Start with the pair having highest weight, then extend by adding
-    fragments that score best at either end.
-    Returns a column-order list (indices into fragments array).
-    """
+    """Greedily construct a column ordering from adjacency weights."""
     m = len(adjacency_matrix)
     if m <= 1:
         return list(range(m))
@@ -363,14 +339,13 @@ def greedy_fragment_ordering(adjacency_matrix: List[List[float]]) -> List[int]:
                 best_score = adjacency_matrix[i][j]
                 best_i, best_j = i, j
 
-    # Start with the best pair
     ordering = [best_i, best_j]
     used = {best_i, best_j}
 
     # Greedily extend at either end
     while len(ordering) < m:
         best_score = float("-inf")
-        best_pos = None  # 'left' or 'right'
+        best_pos = None
         best_frag = None
 
         left_idx = ordering[0]
@@ -380,21 +355,19 @@ def greedy_fragment_ordering(adjacency_matrix: List[List[float]]) -> List[int]:
             if frag in used:
                 continue
 
-            # Try adding at left (frag -> left_idx)
             score_left = adjacency_matrix[frag][left_idx]
             if score_left > best_score:
                 best_score = score_left
                 best_pos = "left"
                 best_frag = frag
 
-            # Try adding at right (right_idx -> frag)
             score_right = adjacency_matrix[right_idx][frag]
             if score_right > best_score:
                 best_score = score_right
                 best_pos = "right"
                 best_frag = frag
+
         if best_frag is None:
-            # No more fragments to add (shouldn't happen)
             break
 
         if best_pos == "left":
@@ -410,16 +383,12 @@ def greedy_fragment_ordering(adjacency_matrix: List[List[float]]) -> List[int]:
 def beam_fragment_ordering(
     adjacency_matrix: List[List[float]], beam_width: int = 5
 ) -> List[List[int]]:
-    """
-    Use beam search to generate multiple plausible column orderings.
-    Returns up to beam_width complete orderings, scored by cumulative adjacency.
-    """
+    """Use beam search to generate multiple plausible column orderings."""
     m = len(adjacency_matrix)
     if m <= 1:
         return [list(range(m))]
 
     # State: (ordering, used_set, cumulative_score)
-    # Start with all possible single fragments
     beam = [([i], {i}, 0.0) for i in range(m)]
 
     for step in range(m - 1):
@@ -447,11 +416,9 @@ def beam_fragment_ordering(
                 new_score_right = cum_score + score_right
                 candidates.append((new_ordering_right, new_used_right, new_score_right))
 
-        # Keep top beam_width candidates
         candidates.sort(key=lambda x: x[2], reverse=True)
         beam = candidates[:beam_width]
 
-    # Return completed orderings sorted by score
     return [
         ordering for ordering, _, _ in sorted(beam, key=lambda x: x[2], reverse=True)
     ]
@@ -460,13 +427,7 @@ def beam_fragment_ordering(
 def extract_column_fragments(ciphertext: str, key_length: int) -> List[str]:
     """
     Extract column fragments from a columnar transposition ciphertext.
-    The ciphertext is written column-by-column, so we slice contiguous blocks.
-
-    For a ciphertext of length n and key_length m:
-    - The first (n % m) columns have length ceil(n/m)
-    - The remaining columns have length floor(n/m)
-
-    Returns a list of m strings (one per column in reading order).
+    First (n % m) columns have length ceil(n/m), remaining have floor(n/m).
     """
     if not ciphertext or key_length <= 0:
         return [""] * max(1, key_length)
@@ -474,21 +435,18 @@ def extract_column_fragments(ciphertext: str, key_length: int) -> List[str]:
     n = len(ciphertext)
     m = key_length
 
-    # Calculate column lengths
-    base_len = n // m  # floor(n/m)
-    remainder = n % m  # number of columns with one extra character
+    base_len = n // m
+    remainder = n % m
 
     fragments = []
     pos = 0
 
     for col_idx in range(m):
-        # First 'remainder' columns have base_len + 1 chars
         if col_idx < remainder:
             col_len = base_len + 1
         else:
             col_len = base_len
 
-        # Slice the contiguous block for this column
         fragments.append(ciphertext[pos : pos + col_len])
         pos += col_len
 
@@ -500,12 +458,7 @@ def debug_enabled(cfg: Dict) -> bool:
 
 
 def infer_key_search_variables(key_length: int) -> Tuple[int, int, float]:
-    """Return (restarts, max_iterations, ic_threshold) based on key length.
-
-    This is a heuristic piecewise schedule intended to allocate more
-    search effort to mid/large key lengths.
-    """
-    # sensible defaults
+    """Return (restarts, max_iterations, ic_threshold) based on key length."""
     if key_length <= 6:
         return 50, 2000, 0.06
     elif key_length <= 8:
@@ -547,11 +500,7 @@ def is_tie(a: float, b: float, eps: float = 1e-8) -> bool:
 
 
 def fractionated_to_plain_with_map(fractionated: str, inv_map: Dict[str, str]) -> str:
-    """Convert a fractionated ADFGVX stream to plaintext using an inverse map.
-
-    Trailing padding 'X' characters are stripped before conversion. Unknown
-    digrams are replaced with '?'.
-    """
+    """Convert a fractionated ADFGVX stream to plaintext using an inverse map."""
     if not fractionated:
         return ""
     fractionated = fractionated.rstrip("X")
@@ -559,15 +508,14 @@ def fractionated_to_plain_with_map(fractionated: str, inv_map: Dict[str, str]) -
     for i in range(0, len(fractionated), 2):
         pair = fractionated[i : i + 2]
         if len(pair) < 2:
-            # stray single symbol at end
             out.append("?")
             continue
         out.append(inv_map.get(pair, "?"))
     return "".join(out)
 
 
-# keep a small, focused English letter-frequency based scorer
 def english_score_texts(texts: List[str]) -> float:
+    """Score texts based on English letter frequencies."""
     LETTER_LOG_FREQ = {
         "E": math.log(0.12702),
         "T": math.log(0.09056),
@@ -597,7 +545,6 @@ def english_score_texts(texts: List[str]) -> float:
         "Z": math.log(0.00074),
     }
     LOG_FLOOR = math.log(1e-5)
-
     COMMON_WORDS_EN = {
         "THE",
         "AND",
@@ -612,7 +559,6 @@ def english_score_texts(texts: List[str]) -> float:
         "AS",
     }
 
-    # Only enable the common-words bonus when explicitly configured.
     use_word_bonus = bool(CONFIG.get("use_common_words_bonus_in_key_search", False))
 
     total_log = 0.0
@@ -620,11 +566,11 @@ def english_score_texts(texts: List[str]) -> float:
     word_bonus = 0.0
     total_len = 0
     alpha_count = 0
+
     for t in texts:
         total_len += len(t)
         u = t.upper()
         words = u.split()
-        # apply word bonus only when configured
         if use_word_bonus:
             for w in words:
                 if w in COMMON_WORDS_EN:
@@ -635,16 +581,15 @@ def english_score_texts(texts: List[str]) -> float:
                 letter_count += 1
                 total_log += LETTER_LOG_FREQ.get(ch, LOG_FLOOR)
             else:
-                # small penalty for non-letters
                 total_log += LOG_FLOOR
 
     avg_log = total_log / max(1, letter_count)
     alpha_ratio = alpha_count / max(1, total_len)
-    # include word_bonus only if it was enabled
     return avg_log + (word_bonus if use_word_bonus else 0.0) + alpha_ratio
 
 
 def german_score_texts(texts: List[str]) -> float:
+    """Score texts based on German letter frequencies."""
     LETTER_LOG_FREQ_DE = {
         "E": math.log(0.1659),
         "N": math.log(0.0978),
@@ -674,8 +619,7 @@ def german_score_texts(texts: List[str]) -> float:
         "C": math.log(0.003),
     }
     LOG_FLOOR = math.log(1e-6)
-
-    GERMAN_COMMON_CANDIDATES = {
+    GERMAN_COMMON = {
         "DER",
         "DIE",
         "DAS",
@@ -691,20 +635,18 @@ def german_score_texts(texts: List[str]) -> float:
         "AN",
         "ALS",
     }
-    GERMAN_COMMON = {w for w in GERMAN_COMMON_CANDIDATES if 2 <= len(w) <= 3}
 
-    # Only enable the common-words bonus when explicitly configured.
     use_word_bonus = bool(CONFIG.get("use_common_words_bonus_in_key_search", False))
 
     total_log = 0.0
     letter_count = 0
     total_len = 0
     alpha_count = 0
+
     for t in texts:
         total_len += len(t)
         u = t.upper()
         words = u.split()
-        # apply word bonus only when configured
         if use_word_bonus:
             for w in words:
                 if w in GERMAN_COMMON:
@@ -723,6 +665,7 @@ def german_score_texts(texts: List[str]) -> float:
 
 
 def score_texts(texts: List[str], lang: str = "EN") -> float:
+    """Score texts using language-specific frequency analysis."""
     if (lang or "").upper() == "DE":
         return german_score_texts(texts)
     return english_score_texts(texts)
@@ -733,13 +676,12 @@ def reconstruct_long_key_seeds(
 ) -> List[List[int]]:
     """
     Generate seed column orderings for long keys using fragment adjacency analysis.
-    Produces many raw seeds, expands them with small randomized local moves,
-    and returns up to `num_seeds` candidates (may contain similar/duplicate orders).
+    Supports fragment voting seeds, random seeds, or adjacency-based beam search.
     """
     if not ciphertexts:
         return [list(range(key_length))]
 
-    # --- NEW: Check if fragment voting seeds are requested ---
+    # Fragment voting strategy: generate seeds based on successor frequencies
     if CONFIG.get("fragment_voting_seeds", False):
         import random as _rnd
         from collections import Counter
@@ -759,37 +701,26 @@ def reconstruct_long_key_seeds(
         combined_fragments = ["".join(frags) for frags in all_fragments]
 
         # Build successor frequency maps for each fragment
-        # successor_counts[i][j] = how often fragment j follows fragment i in interleaved reading
         successor_counts = [Counter() for _ in range(key_length)]
 
-        # Analyze interleaved bigrams across all fragments
         for frag_idx, frag in enumerate(combined_fragments):
             for pos in range(len(frag) - 1):
-                # For each position in this fragment, find which fragments appear at next position
-                # when reading the fractionated stream in interleaved fashion
-                # This simulates reading bigrams across fragment boundaries
                 for other_idx in range(key_length):
                     if other_idx != frag_idx and pos < len(
                         combined_fragments[other_idx]
                     ):
-                        # Count this as a potential successor relationship
                         successor_counts[frag_idx][other_idx] += 1
 
         # Generate orderings using greedy "most frequent successor" strategy
         voting_seeds = []
 
-        # Try starting from each fragment as a potential first column
         for start_frag in range(key_length):
             ordering = [start_frag]
             used = {start_frag}
             current = start_frag
 
-            # Greedily add most frequent successor at each step
             while len(ordering) < key_length:
-                # Get successor counts for current fragment
                 successors = successor_counts[current]
-
-                # Filter to unused fragments
                 candidates = [
                     (count, frag)
                     for frag, count in successors.items()
@@ -797,14 +728,12 @@ def reconstruct_long_key_seeds(
                 ]
 
                 if not candidates:
-                    # No successor data - pick random unused fragment
                     remaining = [f for f in range(key_length) if f not in used]
                     if remaining:
                         next_frag = _rnd.choice(remaining)
                     else:
                         break
                 else:
-                    # Pick fragment with highest successor count
                     candidates.sort(reverse=True)
                     next_frag = candidates[0][1]
 
@@ -824,27 +753,24 @@ def reconstruct_long_key_seeds(
         diversified_seeds = []
         for seed in voting_seeds:
             diversified_seeds.append(seed.copy())
+            diversified_seeds.append(seed[::-1])  # reversed
 
-            # Add variations: reversed
-            diversified_seeds.append(seed[::-1])
-
-            # Add variations: swap adjacent pairs
+            # Swap adjacent pairs
             if key_length >= 2:
                 swapped = seed.copy()
                 for i in range(0, key_length - 1, 2):
                     swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
                 diversified_seeds.append(swapped)
 
-            # Add variations: rotate by small amounts
+            # Rotate by small amounts
             for k in [1, 2, key_length // 3, key_length // 2]:
                 if k > 0 and k < key_length:
                     rotated = seed[k:] + seed[:k]
                     diversified_seeds.append(rotated)
 
-            # Add variations: small random perturbations
+            # Small random perturbations
             for _ in range(3):
                 perturbed = seed.copy()
-                # Swap 2-3 random pairs
                 num_swaps = _rnd.randint(2, 3)
                 for _ in range(num_swaps):
                     i, j = _rnd.sample(range(key_length), 2)
@@ -865,14 +791,13 @@ def reconstruct_long_key_seeds(
                 f"[FRAGMENT-VOTING] Total unique seeds after diversification: {len(unique_seeds)}"
             )
 
-        # --- NEW: Score seeds with combined bigram + tetragram IC ---
+        # Score seeds with combined bigram + tetragram IC
         if len(unique_seeds) > num_seeds:
             if CONFIG.get("intermediate_output", True):
                 print(
-                    f"[FRAGMENT-VOTING] Scoring {len(unique_seeds)} seeds with combined IC (bigram + tetragram)..."
+                    f"[FRAGMENT-VOTING] Scoring {len(unique_seeds)} seeds with combined IC..."
                 )
 
-            # Helper to compute tetragram weight for this key length
             def compute_tetra_weight_for_length(m: int) -> float:
                 base_weight = float(CONFIG.get("tetragram_base_weight", 0.1))
                 boost_start = int(CONFIG.get("tetragram_boost_start_length", 12))
@@ -883,7 +808,6 @@ def reconstruct_long_key_seeds(
                 if m >= boost_start:
                     w += max(0, m - boost_start) * boost_per_col
 
-                # add per-length even-key additive if present from infer_fragment_seeding_variables
                 try:
                     phase_params = infer_fragment_seeding_variables(m)
                     even_add = float(
@@ -898,8 +822,6 @@ def reconstruct_long_key_seeds(
 
                 return min(max(w, 0.0), max_weight)
 
-            # Score each seed
-
             scored_seeds = []
             tetragram_weight = compute_tetra_weight_for_length(key_length)
             tetragram_scale = CONFIG.get("tetragram_ic_scale_factor", 15.0)
@@ -907,14 +829,12 @@ def reconstruct_long_key_seeds(
             for seed_order in unique_seeds:
                 seed_key = string_key_from_column_order(seed_order)
 
-                # Decrypt with this seed
                 decrypted_parts = []
                 for ct in ciphertexts:
                     ct_clean = ct.replace(" ", "")
                     frac = reverse_columnar_transposition(
                         ct_clean, seed_key, padding=CONFIG.get("padding", True)
                     )
-                    # Strip padding if enabled
                     if CONFIG.get("padding", True):
                         frac = frac.rstrip("X")
                     decrypted_parts.append(frac)
@@ -925,17 +845,13 @@ def reconstruct_long_key_seeds(
                     scored_seeds.append((0.0, seed_order))
                     continue
 
-                # Compute bigram IC
                 bigrams = get_bigrams(combined)
                 bigram_ic = compute_token_ic(bigrams)
 
-                # Compute tetragram IC if text is long enough
                 if len(combined) >= 4:
                     tetragrams = get_tetragrams(combined)
                     tetragram_ic = compute_token_ic(tetragrams)
-                    # Scale tetragram IC to bigram range
                     tetragram_ic_scaled = tetragram_ic * tetragram_scale
-                    # Combined IC with tetragram weight
                     combined_ic = (
                         1.0 - tetragram_weight
                     ) * bigram_ic + tetragram_weight * tetragram_ic_scaled
@@ -944,17 +860,15 @@ def reconstruct_long_key_seeds(
 
                 scored_seeds.append((combined_ic, seed_order))
 
-            # Sort by combined IC (descending) and take top num_seeds
             scored_seeds.sort(key=lambda x: x[0], reverse=True)
             unique_seeds = [seed for _, seed in scored_seeds[:num_seeds]]
 
             if CONFIG.get("intermediate_output", True):
                 print(
-                    f"[FRAGMENT-VOTING] Selected top {len(unique_seeds)} seeds by combined IC "
-                    f"(tetragram_weight={tetragram_weight:.3f})"
+                    f"[FRAGMENT-VOTING] Selected top {len(unique_seeds)} seeds by combined IC (tetragram_weight={tetragram_weight:.3f})"
                 )
 
-        # If we don't have enough seeds, supplement with random ones
+        # Supplement with random seeds if needed
         while len(unique_seeds) < num_seeds:
             random_seed = list(range(key_length))
             _rnd.shuffle(random_seed)
@@ -963,48 +877,34 @@ def reconstruct_long_key_seeds(
                 seen.add(seed_tuple)
                 unique_seeds.append(random_seed)
 
-        # Return requested number of seeds
         return unique_seeds[:num_seeds]
 
-    # --- NEW: Check if random seeds are requested ---
+    # Random seeds strategy
     if CONFIG.get("random_seeds", False):
         import random as _rnd
 
-        # Generate completely random shuffled orderings
         raw_seeds = max(1000, key_length * 100)
         random_orderings = []
         seen_tuples = set()
 
-        # Generate random orderings until we have enough unique ones
         attempts = 0
-        max_attempts = raw_seeds * 10  # Prevent infinite loop
+        max_attempts = raw_seeds * 10
 
         while len(random_orderings) < raw_seeds and attempts < max_attempts:
             attempts += 1
             ordering = list(range(key_length))
             _rnd.shuffle(ordering)
 
-            # Deduplicate using tuple representation
             ordering_tuple = tuple(ordering)
             if ordering_tuple not in seen_tuples:
                 seen_tuples.add(ordering_tuple)
                 random_orderings.append(ordering)
 
-        # Return requested number of seeds (or all generated if fewer)
         desired = max(num_seeds, min(len(random_orderings), num_seeds))
         return random_orderings[:desired]
 
-    # --- EXISTING: Fragment adjacency analysis approach ---
-    # Produce many raw seeds, expands them with small randomized local moves,
-    # and returns up to `num_seeds` candidates (may contain similar/duplicate orders).
-    if not ciphertexts:
-        return [list(range(key_length))]
-
-    # --- CHANGED: more aggressive raw seeds based on key length (key_length * 10) ---
-    # Aim for a large diverse pool: base on key_length * 10, with a reasonable lower bound.
+    # Fragment adjacency analysis approach (default)
     raw_seeds = max(1000, key_length * 100)
-    # if key_length >= 50:
-    #     raw_seeds = max(raw_seeds, 200)
 
     # Extract and concatenate fragments from all ciphertexts
     all_fragments = [[] for _ in range(key_length)]
@@ -1015,21 +915,14 @@ def reconstruct_long_key_seeds(
             all_fragments[i].append(frag)
     combined_fragments = ["".join(frags) for frags in all_fragments]
 
-    # adjacency matrix
     adjacency_matrix = build_adjacency_matrix(combined_fragments)
-
-    # --- CHANGED: beam width clamped into [8,12] for diversity ---
     beam_w = min(12, max(8, raw_seeds // 8))
 
-    # Generate beam candidates and greedy
     beam_orderings = beam_fragment_ordering(adjacency_matrix, beam_width=beam_w)
     greedy_ordering = greedy_fragment_ordering(adjacency_matrix)
 
-    # Start with greedy + beam, then diversify
     seeds: List[List[int]] = [greedy_ordering] + beam_orderings
 
-    # If insufficient, add randomized orderings derived from adjacency scores
-    # Also apply stronger diversification (more tries and broader moves) to each seed
     def diversify(ordering: List[int], tries: int = 6) -> Iterable[List[int]]:
         import random
 
@@ -1037,14 +930,14 @@ def reconstruct_long_key_seeds(
         m = len(ordering)
         for t in range(tries):
             o = ordering.copy()
-            # multiple small random swaps
+            # Multiple small random swaps
             swaps = 1 + (t % 3)
             for _ in range(swaps):
                 i = random.randrange(0, m)
                 j = random.randrange(0, m)
                 o[i], o[j] = o[j], o[i]
 
-            # occasional small rotation of a short segment
+            # Occasional small rotation
             if m >= 4 and random.random() < 0.6:
                 a = random.randrange(0, max(1, m - 2))
                 L = min(6, m - a)
@@ -1052,13 +945,13 @@ def reconstruct_long_key_seeds(
                 seg = o[a : a + L]
                 o[a : a + L] = seg[k:] + seg[:k]
 
-            # occasional short reversal
+            # Occasional short reversal
             if m >= 3 and random.random() < 0.4:
                 a = random.randrange(0, m - 2)
                 b = min(m, a + 3 + random.randrange(0, min(4, m - a)))
                 o[a:b] = list(reversed(o[a:b]))
 
-            # jitter: move a small element to another position
+            # Jitter: move element to another position
             if m >= 3 and random.random() < 0.5:
                 i = random.randrange(0, m)
                 val = o.pop(i)
@@ -1068,9 +961,7 @@ def reconstruct_long_key_seeds(
             out.append(o)
         return out
 
-    # Build expanded seed list (allow duplicates)
     expanded: List[List[int]] = []
-    # ensure we include the greedy + beam candidates first
     for s in seeds:
         expanded.append(s)
         for v in diversify(s, tries=6):
@@ -1078,17 +969,15 @@ def reconstruct_long_key_seeds(
         if len(expanded) >= raw_seeds:
             break
 
-    # If still short, add some completely random orderings and structured variants
     import random as _rnd
 
     while len(expanded) < raw_seeds:
         o = list(range(key_length))
         _rnd.shuffle(o)
-        # add a deterministic variant (reverse/interleave) occasionally to increase spread
         if len(expanded) % 5 == 0:
             expanded.append(o[::-1])
         elif len(expanded) % 7 == 0:
-            # interleave halves
+            # Interleave halves
             a = o[: key_length // 2]
             b = o[key_length // 2 :]
             inter = [
@@ -1104,17 +993,9 @@ def reconstruct_long_key_seeds(
         else:
             expanded.append(o)
 
-    # Reduce to requested num_seeds but if caller asked for more keep at least that many unique-ish seeds.
-    # Respect the caller's `num_seeds` as a minimum; if caller passed a small value, still return varied pool.
     desired = max(num_seeds, min(len(expanded), num_seeds))
-    # return the first `desired` entries (they are already diversified)
     final = expanded[:desired]
     return final
-
-
-#
-# Runners for larger algorithms (accept breaker instance)
-#
 
 
 def simulated_annealing_runner(
@@ -1132,7 +1013,6 @@ def simulated_annealing_runner(
     """Run simulated annealing using the provided breaker instance."""
     import math
 
-    # initialize current order
     if start_key is None:
         current_order = breaker.random_order(key_length)
     else:
@@ -1316,52 +1196,45 @@ def hill_climb_sequential_runner(
     ic_earlystop_min_restarts: int = 10,
     score_eps: float = 1e-8,
 ):
-    """Sequential hill-climb implementation extracted from ADFGVXBreaker.hill_climb."""
+    """Sequential hill-climb implementation for key search."""
     best_global_key = None
     best_global_score = float("-inf")
     batch = [ct.replace(" ", "") for ct in ciphertexts]
     per_restart_results = []
 
-    # dynamic restart addition percentage (read from CONFIG)
+    # Dynamic restart addition
     total_restarts = restarts
     dynamic_pct = int(CONFIG.get("dynamic_restart_addition", 0) or 0)
-    # number of restarts to add when triggered (derived from original total_restarts)
     add_restarts_base = (
         max(1, int(total_restarts * dynamic_pct / 100)) if dynamic_pct > 0 else 0
     )
-    # threshold: how many restarts must have passed since previous best for an addition
     threshold_count = (
         max(1, int(total_restarts * dynamic_pct / 100)) if dynamic_pct > 0 else 0
     )
 
-    # track when the previous global-best was last updated (restart index)
     prev_best_update = -1
 
-    # NEW: Check if we have injected seed orderings and should diversify them
+    # Check for injected seed orderings
     injected = getattr(breaker, "_injected_seed_orderings", []) or []
     use_nondeterministic_rng = CONFIG.get(
         "non_deterministic_RNG_seed_per_restart", False
     )
 
-    # NEW: Create perturbed variants if we have injected seeds
+    # Create perturbed variants if we have injected seeds
     restart_orderings = []
     if injected:
         variants_per_seed = min(6, max(3, key_length // 4))
         if intermediate_output:
             print(
-                f"[DIVERSIFY-SEQ] Creating {variants_per_seed} variants per seed "
-                f"({'non-deterministic' if use_nondeterministic_rng else 'deterministic'} RNG)"
+                f"[DIVERSIFY-SEQ] Creating {variants_per_seed} variants per seed ({'non-deterministic' if use_nondeterministic_rng else 'deterministic'} RNG)"
             )
 
         for seed_order in injected:
-            # Base variant
             restart_orderings.append(seed_order.copy())
 
-            # Perturbed variants
             for variant_idx in range(1, variants_per_seed):
                 perturbed = seed_order.copy()
 
-                # Apply same perturbation logic as parallel version
                 if variant_idx == 1 and key_length >= 2:
                     i, j = breaker.rng.sample(range(key_length), 2)
                     perturbed[i], perturbed[j] = perturbed[j], perturbed[i]
@@ -1414,7 +1287,7 @@ def hill_climb_sequential_runner(
                 f"Hill-climb restart {r}/{current_restarts}, best_global_score={best_global_score:.6f}"
             )
 
-        # NEW: Use perturbed ordering if available, else generate random
+        # Use perturbed ordering if available, else generate random
         if r < len(restart_orderings):
             order = restart_orderings[r].copy()
         else:
@@ -1429,7 +1302,7 @@ def hill_climb_sequential_runner(
         key_string = breaker.string_key_from_column_order(order)
         cur_score = breaker.score_key_transposition(batch, key_string, cache=eval_cache)
 
-        # preliminary pass
+        # Preliminary pass
         current_improved = True
         while current_improved:
             current_improved = False
@@ -1446,14 +1319,13 @@ def hill_climb_sequential_runner(
                     current_improved = True
                     if intermediate_output:
                         col_order = get_column_order(key_string)
-                        # Only emit the verbose PRE_PASS line when debug mode is enabled.
                         if debug:
                             print(
                                 f"[PRE_PASS] restart={r} accepted {name} -> score={cur_score:.6f} key='{key_string}' key_digits={col_order}"
                             )
                     break
 
-        # main HC loop
+        # Main hill-climb loop
         iteration = 0
         improved = True
         while improved and iteration < max_iterations:
@@ -1480,7 +1352,7 @@ def hill_climb_sequential_runner(
                 cur_score = best_iter_score
                 improved = True
 
-        # short SA
+        # Optional hybrid SA refinement
         if use_hybrid:
             try:
                 sa_key, sa_score = simulated_annealing_runner(
@@ -1510,19 +1382,16 @@ def hill_climb_sequential_runner(
 
         per_restart_results.append((cur_score, key_string))
 
-        # Publish incremental per-restart candidates after each restart so an
-        # external KeyboardInterrupt handler can read partial results.
+        # Publish incremental results for interrupt handling
         try:
             if not hasattr(breaker, "_per_length_candidates"):
                 breaker._per_length_candidates = {}
             breaker._per_length_candidates[key_length] = per_restart_results.copy()
         except Exception:
-            # be tolerant: do not let bookkeeping errors stop the search
             pass
 
         # Check for new global best and apply dynamic restart logic
         if cur_score > best_global_score:
-            # If we have a previous best, check its age relative to threshold
             if prev_best_update != -1 and dynamic_pct > 0:
                 age = r - prev_best_update
                 if age >= threshold_count:
@@ -1531,10 +1400,9 @@ def hill_climb_sequential_runner(
                     if intermediate_output:
                         remaining = max(0, current_restarts - r - 1)
                         print(
-                            f"[DYNAMIC] Found new global-best at restart={r}; previous best was {age} restarts ago >= threshold {threshold_count}. "
-                            f"Extending total restarts by {add_restarts}. Total remaining restarts now: {remaining}"
+                            f"[DYNAMIC] Found new global-best at restart={r}; previous best was {age} restarts ago >= threshold {threshold_count}. Extending total restarts by {add_restarts}. Total remaining restarts now: {remaining}"
                         )
-            # update bookkeeping for best found
+
             best_global_score = cur_score
             best_global_key = key_string
             prev_best_update = r
@@ -1544,47 +1412,36 @@ def hill_climb_sequential_runner(
                     f"[UPDATE] restart={r} new best score={best_global_score:.6f} key='{best_global_key}'"
                 )
 
-        # EARLY STOP: allow immediate early stop when configured (do not require min_restarts)
+        # Early stop check
         if (
             CONFIG.get("early_stop_if_ic_threshold_reached", False)
             and best_global_score >= ic_threshold - score_eps
         ):
             if intermediate_output:
                 print(
-                    f"Early stop at restart {r}, score {best_global_score:.6f} >= threshold {ic_threshold} (early_stop_if_ic_threshold_reached enabled)"
+                    f"Early stop at restart {r}, score {best_global_score:.6f} >= threshold {ic_threshold}"
                 )
             break
 
-        # existing conditional early stop that depends on minimum re
+        r += 1
 
-
-#
-# CLASSES
-#
+    return best_global_key, best_global_score
 
 
 class GlobalLeaderboard:
-    """
-    Maintains a sorted list of best key candidates across all search phases.
-    Prevents duplicate work and enables dynamic prioritization.
-    """
+    """Maintains a sorted list of best key candidates across all search phases."""
 
     def __init__(self, max_size: int = 100):
         self.max_size = max_size
-        self.candidates = []  # List of (score, key_string) tuples
-        self.seen_keys = set()  # Track unique keys to prevent duplicates
+        self.candidates = []
+        self.seen_keys = set()
 
     def add_candidate(self, score: float, key_string: str) -> bool:
-        """
-        Add a candidate to the leaderboard. Returns True if added/updated.
-        Maintains sorted order (descending by score) and prevents duplicates.
-        """
+        """Add a candidate to the leaderboard. Returns True if added/updated."""
         if not key_string:
             return False
 
-        # Check if key already exists
         if key_string in self.seen_keys:
-            # Update score if better
             for i, (old_score, old_key) in enumerate(self.candidates):
                 if old_key == key_string:
                     if score > old_score:
@@ -1593,16 +1450,13 @@ class GlobalLeaderboard:
                         return True
                     return False
 
-        # Add new candidate
         self.candidates.append((score, key_string))
         self.seen_keys.add(key_string)
 
-        # Sort and trim to max_size
         self._resort()
         if len(self.candidates) > self.max_size:
             removed = self.candidates[self.max_size :]
             self.candidates = self.candidates[: self.max_size]
-            # Remove keys that are no longer in leaderboard
             for _, removed_key in removed:
                 self.seen_keys.discard(removed_key)
 

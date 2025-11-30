@@ -99,12 +99,10 @@ set_config_helpers(CONFIG)
 
 
 def debug(*args, **kwargs):
-    """Print only when CONFIG['debug_output'] is True."""
     if CONFIG.get("debug_output", False):
         print(*args, **kwargs)
 
 
-# ---------- NEW: reusable entry processing function ----------
 def process_entry_logic(
     entry_id: str,
     ciphertexts: List[str],
@@ -115,21 +113,13 @@ def process_entry_logic(
     messages_json_path: str,
     test_alphabet: Optional[str] = None,
 ):
-    """
-    Run the full breaker + alphabet-optimizer flow for a single entry and return the updated entry dict.
-    This mirrors the behavior previously in run_demo and break_cipher_from_file but is reusable.
-    - If cfg['final_manual_alphabet_testing'] is True the function will prompt the user to verify the top candidates
-      and will return a single verified result written into entry['results'].
-    - Otherwise it returns the top best results (reduced top-3) in entry['results'].
-    """
-    # Build the entry dict that will be returned/updated
+    """Run the breaker + alphabet-optimizer flow for a single entry."""
     entry: Dict = {}
     entry["plaintexts"] = plaintexts
     entry["ciphertexts"] = ciphertexts
     entry["key"] = column_key
     entry["alphabet"] = alphabet
 
-    # --- Informational print: show key hint, numeric column order (if available), alphabet, and candidate lengths ---
     if CONFIG.get("intermediate_output", True):
         key_digits = None
         key_len = None
@@ -151,8 +141,6 @@ def process_entry_logic(
             + f" alphabet='{alphabet}' Trying lengths: {lengths_info}\n"
         )
 
-        # Also print the canonical encoded key-string derived from the numeric column order,
-        # e.g. convert numeric order -> letters 'A'.. (same scheme as string_key_from_column_order)
         if key_digits is not None:
             try:
                 m = len(key_digits)
@@ -162,13 +150,8 @@ def process_entry_logic(
                 encoded_key = "".join(chr(ord("A") + r) for r in rank)
                 print(f"Encoded key string: '{encoded_key}'\n\n")
             except Exception:
-                # be tolerant: don't crash the run if encoding fails
                 pass
-    # ------------------------------------------------------------------------
 
-    # Ensure we have a valid alphabet to use for internal optimization runs.
-    # We do not overwrite the entry's alphabet here; this is only a runtime fallback
-    # so the optimizer / AlphabetOptimizer constructor never receives an invalid symbol domain.
     if isinstance(alphabet, str) and len(alphabet) == 36 and len(set(alphabet)) == 36:
         working_alphabet = alphabet
     else:
@@ -180,22 +163,14 @@ def process_entry_logic(
                 "[NOTICE] Provided alphabet missing or invalid -> using fallback canonical alphabet for optimization."
             )
 
-    # 1) Transposition break (same as before)
     candidate_lengths = cfg.get("lengths")
     if not isinstance(candidate_lengths, list) or len(candidate_lengths) == 0:
-        candidate_lengths = list(range(3, 9))  # small sensible default
+        candidate_lengths = list(range(3, 9))
 
-    # Ensure we have a breaker instance before invoking break_transposition
-    # Use per-call cfg['padding'] when provided, otherwise let the breaker fall back to global CONFIG
     breaker = ADFGVXBreaker(config=CONFIG, padding=cfg.get("padding", None))
 
-    # Export provided key hint so breaker can match equivalent numeric orders when printing top candidates.
-    # Preserve any previous global value and restore it after break_transposition finishes.
     prev_provided = get_provided_key_hint()
-    # set (possibly None) into utils' provided-hint slot
     set_provided_key_hint(column_key if column_key else None)
-
-    # Clear any previous keyboard interrupt flag
     clear_keyboard_interrupt()
 
     try:
@@ -208,39 +183,30 @@ def process_entry_logic(
             use_hybrid=cfg.get("use_hybrid", None),
         )
     except KeyboardInterrupt:
-        # This should not happen now, but keep as fallback
         if CONFIG.get("intermediate_output", True):
             print("\n[KEYBOARD-INTERRUPT] Received during break_transposition...")
-        # Don't re-raise - let the flag-based handling below take over
         pass
     finally:
-        # restore previous global hint (remove if it wasn't set previously)
         set_provided_key_hint(prev_provided)
 
-    # Check if keyboard interrupt occurred during processing
     if was_keyboard_interrupted():
         if CONFIG.get("intermediate_output", True):
             print(
                 "\n[INTERRUPT] Keyboard interrupt detected — displaying best candidates found so far...\n"
             )
 
-        # Clear the interrupt flag so subsequent operations work normally
         clear_keyboard_interrupt()
-
         per_length = getattr(breaker, "_per_length_candidates", {}) or {}
 
-        # Build results from best candidates found
         results = {}
         for m in candidate_lengths:
             cands = per_length.get(m, [])
             if cands:
-                # cands are tuples (score, key_string)
                 best_score, best_key = max(cands, key=lambda t: t[0])
                 results[m] = (best_key, best_score)
             else:
                 results[m] = (None, float("-inf"))
 
-        # Display top candidates for each length (same format as normal completion)
         if CONFIG.get("intermediate_output", True):
             provided_hint = get_provided_key_hint()
             possible_orders_set = None
@@ -281,7 +247,6 @@ def process_entry_logic(
                         if tuple(key_digits) in possible_orders_set:
                             matches_for_hint.append((idx + 1, key_digits))
 
-                    # Show diagnostics for top 5 candidates
                     if idx < 5 and key_letters:
                         try:
                             decrypted_parts = []
@@ -327,7 +292,6 @@ def process_entry_logic(
             print("Search interrupted - results above are partial")
             print("=" * 80 + "\n")
 
-        # Don't write to file - just provide results for inspection
         entry["_keyboard_interrupt"] = True
         entry["results"] = [
             {
@@ -338,15 +302,9 @@ def process_entry_logic(
             for m in sorted(results.keys())
         ]
 
-        # Continue to normal flow so user can inspect results
-        # Don't return early - let the function complete normally
-        # This allows the program to continue running (user can press Ctrl+D to exit)
-    # gather per-length candidates (populated by breaker)
     per_length = getattr(breaker, "_per_length_candidates", {})
 
-    # If configured to run only the key-search phase, skip alphabet optimization
     if cfg.get("key_search_only", False):
-        # Prepare simple results from the transposition outputs and return immediately.
         results_list = []
         try:
             _, inverse_poly_map = create_polybius_square(alphabet)
@@ -367,14 +325,12 @@ def process_entry_logic(
             if key_string:
                 for ct in ciphertexts:
                     try:
-                        # reuse full decrypt pipeline (handles spacing/padding)
                         plain = decrypt_message(ct, inverse_poly_map, key_string)
                     except Exception as e:
                         plain = f"<decryption_error:{e}>"
                     entry_result["recovered_plaintexts"].append(plain)
             results_list.append(entry_result)
 
-        # keep only top-3 by score for the persisted results if we have any entries
         if results_list:
             results_list_sorted = sorted(
                 results_list, key=lambda x: x.get("score", 0), reverse=True
@@ -392,19 +348,16 @@ def process_entry_logic(
         else:
             entry["results"] = []
 
-        # attach per-length candidates for inspection and return immediately
         breaker._optimizer_outcomes = {}
         return entry
 
-    # 2) Alphabet optimization over top candidates
+    # Alphabet optimization
     optimizer_outcomes: Dict[int, List[Dict]] = {}
     TOP_CANDIDATES_PER_LENGTH = cfg.get("top_alphabet_candidates_per_key_length", 10)
     TOP_LENGTH_RUNS = cfg.get("top_key_candidates_runs", 3)
     TOP_ALPHABET_CANDIDATES = cfg.get("top_alphabet_candidates_runs", 5)
-    # collect all alphabet candidates from all runs for consolidated prompting
     all_alphabet_candidates: List[Tuple[float, str, List[str], int, str, float]] = []
 
-    # Rank lengths by transposition score (descending) and select top N lengths to optimize
     lengths_ranked = sorted(
         results.keys(),
         key=lambda L: (results.get(L, (None, float("-inf")))[1] or float("-inf")),
@@ -421,13 +374,8 @@ def process_entry_logic(
         cands = per_length.get(length, [])
         if not cands:
             continue
-        # initial sort by transposition score (descending)
         cands_sorted = sorted(cands, key=lambda x: x[0], reverse=True)
 
-        # Re-rank near-tied candidates by a lightweight English-likeness check:
-        #  - decrypt fractionated streams with the candidate key
-        #  - decode using canonical (initial) polybius alphabet
-        #  - score using english_score_texts and use it as a secondary sort key
         try:
             _, canonical_inv = create_polybius_square(
                 CONFIG.get("initial_alphabet", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -444,8 +392,6 @@ def process_entry_logic(
                 return float("-inf")
             if key_letters in eng_score_cache:
                 return eng_score_cache[key_letters]
-            # build fractionated streams for candidate and decode with canonical inv_map
-            # Use the existing full decrypt pipeline to obtain plaintexts directly.
             texts = [
                 decrypt_message(ct, canonical_inv, key_letters) for ct in ciphertexts
             ]
@@ -453,7 +399,6 @@ def process_entry_logic(
             eng_score_cache[key_letters] = sc
             return sc
 
-        # enrich candidates with english score and deduplicate identical key strings, keeping best transposition score order
         seen_keys = set()
         enriched = []
         for key_score, key_letters in cands_sorted:
@@ -463,9 +408,7 @@ def process_entry_logic(
             eng_sc = candidate_english_score(key_letters)
             enriched.append((key_score, key_letters, eng_sc))
 
-        # sort by (transposition score, english score) to promote plausible plaintexts among near-ties
         enriched_sorted = sorted(enriched, key=lambda t: (t[0], t[2]), reverse=True)
-        # replace cands_sorted with the re-ranked deduplicated entries
         cands_sorted = [(s, k) for s, k, _ in enriched_sorted]
         k_take = min(TOP_CANDIDATES_PER_LENGTH, len(cands_sorted))
         optimizer_outcomes[length] = []
@@ -487,7 +430,6 @@ def process_entry_logic(
                 base_decoder, trigram_weight=2.0, word_weight=1.0, digit_penalty=0.8
             )
 
-            # Use validated working_alphabet (fallback to canonical if original alphabet was missing/invalid)
             symbols_domain = CONFIG.get(
                 "initial_alphabet", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
             )
@@ -501,8 +443,6 @@ def process_entry_logic(
 
             ALTERNATING_ROUNDS = cfg.get("alternating_rounds", 2)
             current_key = key_string
-            # Track both the evaluator score (used by optimizer) and a plain english score
-            # (used to compare polishing outcomes). This avoids mixing heterogeneous metrics.
             try:
                 current_eval_score = evaluate(symbols_domain)
             except Exception:
@@ -511,7 +451,6 @@ def process_entry_logic(
                 current_english_score, _ = base_decoder(symbols_domain)
             except Exception:
                 current_english_score = float("-inf")
-            # keep a convenience name used later for prints
             current_key_score = current_eval_score
 
             alpha_best_overall = symbols_domain
@@ -552,15 +491,12 @@ def process_entry_logic(
                     if CONFIG.get("intermediate_output", True):
                         print(f"    [POLISH] polishing failed on round {rnd+1}: {e}")
 
-                # polished_score is an English-likeness value (english_score_texts). Compare against
-                # current_english_score to avoid mixing it with the optimizer's evaluator metric.
                 if polished_score > current_english_score:
                     if CONFIG.get("intermediate_output", True):
                         print(
                             f"    [ROUND {rnd+1}] Polished key accepted: '{polished_key}' english_score={polished_score:.4f} (was {current_english_score:.4f})"
                         )
                     current_key = polished_key
-                    # Rebuild fractionated streams & evaluators for the new key and recompute both scores
                     fractionated_streams = [
                         breaker.decrypt_with_key(ct.replace(" ", ""), current_key)
                         for ct in ciphertexts
@@ -610,12 +546,10 @@ def process_entry_logic(
                 }
             )
 
-            # If manual verification requested, prompt now for this key length (top-K)
             if cfg.get("final_manual_alphabet_testing", False):
                 TOP_PROMPT_PER_LENGTH = min(
                     5, cfg.get("top_alphabet_candidates_runs", 5)
                 )
-                # take top-K from the just-populated optimizer_outcomes for this length
                 top_k = sorted(
                     optimizer_outcomes.get(length, []),
                     key=lambda e: e.get("alpha_score", float("-inf")),
@@ -661,37 +595,23 @@ def process_entry_logic(
                             entry["results"] = [entry_result]
                             breaker._optimizer_outcomes = optimizer_outcomes
                             return entry
-                # rejected all top-K for this length -> continue to next length
 
-    # Attach optimizer outcomes for inspection
     breaker._optimizer_outcomes = optimizer_outcomes
 
-    # ------------------------------------------------------------------
-
-    # 3) Prepare final results for JSON storage
-    # If manual verification requested, present a consolidated top-N alphabet candidates (across lengths)
+    # Prepare final results
     manual_verification = cfg.get("final_manual_alphabet_testing", False)
     save_fully_rejected = cfg.get("save_fully_rejected_runs", False)
 
-    # ---------------------------------------------------------------------
-    # Remove the earlier consolidated prompting block that was executed after all lengths.
-    # The logic above now prompts immediately per key length. The large "CONSOLIDATED MANUAL PROMPTING"
-    # block and the following duplicate manual_verification sections were removed.
-    # ---------------------------------------------------------------------
-
-    # Build a ranking of lengths by best alphabet-score from optimizer_outcomes (fallback to transposition score)
     length_best_alpha_score: Dict[int, float] = {}
     for length, entries in optimizer_outcomes.items():
         if entries:
             best = max(entries, key=lambda e: e.get("alpha_score", float("-inf")))
             length_best_alpha_score[length] = best.get("alpha_score", float("-inf"))
-    # fallback: use breaker transposition results order/score
     for length, (kstr, kscore) in results.items():
         length_best_alpha_score.setdefault(
             length, kscore if kscore is not None else float("-inf")
         )
 
-    # Sort lengths descending by best alphabet score
     lengths_sorted = sorted(
         length_best_alpha_score.keys(),
         key=lambda L: length_best_alpha_score[L],
@@ -699,12 +619,10 @@ def process_entry_logic(
     )
 
     if manual_verification:
-        # iterate lengths in rank order; for each present its optimizer candidates until user accepts one
         for length in lengths_sorted:
             cands = optimizer_outcomes.get(length, [])
             if not cands:
                 continue
-            # sort candidates by alpha_score desc
             cands_sorted = sorted(
                 cands, key=lambda e: e.get("alpha_score", float("-inf")), reverse=True
             )
@@ -718,7 +636,6 @@ def process_entry_logic(
                 print(
                     f"\nLength {length} — Candidate #{rank} (alpha_score={a_score:.4f})\nAlphabet: '{alpha}'\nSample: {recovered[0][:200] if recovered else ''}\n"
                 )
-                # show per-message preview
                 for mi, rec in enumerate(recovered, start=1):
                     print(f"  Message {mi}: {rec[:150]}{'...' if len(rec)>150 else ''}")
                 resp = (
@@ -727,7 +644,6 @@ def process_entry_logic(
                     .lower()
                 )
                 if resp in ("y", "1", "yes"):
-                    # store verified single result for this length and return
                     entry_result = {
                         "length": length,
                         "key": key_letters,
@@ -737,14 +653,10 @@ def process_entry_logic(
                     }
                     entry["results"] = [entry_result]
                     return entry
-            # if we reach here we rejected all candidates for this length -> continue to next length
-        # If we exhausted all lengths without verification
         if not save_fully_rejected:
             entry["results"] = []
             return entry
-        # else fall through to produce saved (non-interactive) run outputs for all lengths
 
-    # Non-interactive (or saving rejected runs): produce reduced top-3 results per length according to config.
     results_list = []
     provided_plaintexts_norm = None
     try:
@@ -759,7 +671,6 @@ def process_entry_logic(
             norm = "".join(ch for ch in pt.upper() if ch in valid_chars)
             provided_plaintexts_norm.append(norm)
 
-    # Build per-length entries similar to previous behavior, but apply save_fully_rejected filter
     for length, (key_string, score) in results.items():
         entry_result = {
             "length": length,
@@ -782,11 +693,9 @@ def process_entry_logic(
                 ):
                     entry_result["matches"].append(rec == expected)
 
-        # include this length in results_list if we produced recovered plaintexts or if saving rejected runs requested
         if entry_result["recovered_plaintexts"] or save_fully_rejected:
             results_list.append(entry_result)
 
-    # keep only top-3 by score for the persisted results if we have any entries
     if results_list:
         results_list_sorted = sorted(
             results_list, key=lambda x: x.get("score", 0), reverse=True
@@ -808,18 +717,9 @@ def process_entry_logic(
 
 
 def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] = None):
-    """
-    Load entry `entry_id` from messages.json (path and other params taken from CONFIG
-    unless overridden). Ensure ciphertexts exist (generate from plaintexts if necessary),
-    run the breaker over candidate lengths (from entry or sensible default) and write
-    results back into entry['results'].
-
-    Returns the updated entry dict.
-    """
-
+    """Load entry from messages.json, run the breaker, and write results back."""
     set_config(CONFIG)
 
-    # Merge CONFIG and optional override
     cfg = CONFIG.copy()
     if messages_json_path_override is not None:
         cfg["messages_json_path"] = messages_json_path_override
@@ -846,9 +746,7 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
         raise KeyError(f"Entry '{key_str}' not found in messages.json")
 
     entry = data[key_str]
-
     plaintexts = entry.get("plaintexts", [])
-
     ciphertexts = entry.get("ciphertexts", []) or []
     column_key = entry.get("key")
     alphabet = entry.get("alphabet", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -856,7 +754,6 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
     if column_key is None:
         raise ValueError(f"Entry '{key_str}' has no 'key' field")
 
-    # Respect per-entry language if present: temporarily set CONFIG['language'] for this run.
     prev_lang = CONFIG.get("language", "EN")
     entry_lang = entry.get("language")
     if isinstance(entry_lang, str) and entry_lang.strip():
@@ -868,8 +765,6 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
                     f"[LANG] Using language='{CONFIG['language']}' from messages.json entry '{key_str}'"
                 )
 
-    # If the JSON entry provides explicit candidate key lengths, use them.
-    # Inject into cfg so process_entry_logic will use these lengths.
     entry_lengths = entry.get("lengths")
     if isinstance(entry_lengths, list) and entry_lengths:
         cfg["lengths"] = entry_lengths
@@ -877,12 +772,10 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
             f"Using candidate lengths from messages.json for entry '{key_str}': {cfg['lengths']}"
         )
 
-    # If ciphertexts empty but plaintexts present, generate ciphertexts and update entry
     if (not ciphertexts) and plaintexts:
         print(
             f"Entry '{key_str}': no ciphertexts found — generating from plaintexts using key '{column_key}'"
         )
-        # Guard against invalid/missing alphabet in JSON entries — fall back to canonical alphabet
         try:
             polybius_map, _ = create_polybius_square(alphabet)
         except Exception:
@@ -905,7 +798,6 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
         ciphertexts = generated
         entry["ciphertexts"] = ciphertexts
         data[key_str] = entry
-        # write ciphertexts back immediately
         with open(messages_json_path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
         print(
@@ -915,7 +807,6 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
     if not ciphertexts:
         raise ValueError(f"Entry '{key_str}' contains no ciphertexts to break")
 
-    # Delegate the heavy lifting to the reusable function
     updated_entry = process_entry_logic(
         entry_id=key_str,
         ciphertexts=ciphertexts,
@@ -927,29 +818,22 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
         test_alphabet=None,
     )
 
-    # If a KeyboardInterrupt occurred during processing, do NOT write results back to file.
     if updated_entry.get("_keyboard_interrupt"):
         print(
             f"Processing for entry '{key_str}' was interrupted by user; not writing results to {messages_json_path}"
         )
-        # restore previous global language setting (if it was changed) before returning
         CONFIG["language"] = prev_lang
         return updated_entry
 
-    # If caller only requested key-search, do not modify the messages.json file.
     if cfg.get("key_search_only", False):
         print(
             f"Key-search-only mode enabled: not writing results back to {messages_json_path}"
         )
         return updated_entry
 
-    # --- CHANGED: merge results into existing JSON entry instead of overwriting whole entry ---
-    existing_entry = data.get(key_str, {})  # original entry loaded earlier
-    # Always overwrite the 'results' object entirely
+    existing_entry = data.get(key_str, {})
     existing_entry["results"] = updated_entry.get("results", [])
 
-    # Determine key/alphabet to use for decrypting ciphertexts:
-    # prefer the top optimizer result if available, else fall back to original values
     write_key = None
     write_alphabet = None
     top_results = existing_entry.get("results") or []
@@ -961,7 +845,6 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
         write_key = column_key
         write_alphabet = alphabet
 
-    # Attempt to decrypt ciphertexts with chosen key/alphabet to produce plaintexts to write
     recovered_plaintexts: List[str] = []
     try:
         _, inv_map = create_polybius_square(write_alphabet)
@@ -969,13 +852,10 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
             try:
                 recovered_plaintexts.append(decrypt_message(ct, inv_map, write_key))
             except Exception:
-                recovered_plaintexts.append(
-                    ""
-                )  # preserve indexing; avoid crash on single failure
+                recovered_plaintexts.append("")
     except Exception:
         recovered_plaintexts = []
 
-    # Decide whether to overwrite top-level key/alphabet/plaintexts in the JSON entry
     overwrite_all = cfg.get("overwrite_json_entries", False)
 
     if overwrite_all:
@@ -983,16 +863,13 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
         existing_entry["alphabet"] = write_alphabet
         existing_entry["plaintexts"] = recovered_plaintexts
     else:
-        # Only fill if missing/empty (treat missing, empty list or empty string as empty)
         if not existing_entry.get("key"):
             existing_entry["key"] = write_key
         if not existing_entry.get("alphabet"):
             existing_entry["alphabet"] = write_alphabet
-        # plaintexts: if missing or empty list -> fill
         if not existing_entry.get("plaintexts"):
             existing_entry["plaintexts"] = recovered_plaintexts
 
-    # Persist merged entry back into the data dict and write JSON file
     data[key_str] = existing_entry
     with open(messages_json_path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
@@ -1000,14 +877,11 @@ def break_cipher_from_file(entry_id, messages_json_path_override: Optional[str] 
     print(
         f"Finished processing entry '{key_str}', results written to {messages_json_path}"
     )
-
-    # restore previous global language setting (if it was changed)
     CONFIG["language"] = prev_lang
 
     return updated_entry
 
 
-# Replace run_demo with a reusable break_cipher API that accepts alphabet, key and plaintexts.
 def break_cipher(
     alphabet: str,
     column_key: str,
@@ -1015,22 +889,14 @@ def break_cipher(
     key_lengths: Optional[List[int]] = None,
     test_alphabet: Optional[str] = None,
 ):
-    """
-    Run the breaker + optimizer pipeline for a provided (alphabet, key, plaintexts).
-    plaintexts may be a single string or an iterable of strings. If key_lengths is provided
-    it will be used as candidate lengths (list of ints).
-    Returns the updated entry dict as produced by process_entry_logic.
-    """
-
+    """Run the breaker + optimizer pipeline for provided alphabet, key, and plaintexts."""
     set_config(CONFIG)
 
-    # normalize plaintexts to a list
     if isinstance(plaintexts, str):
         pts = [plaintexts]
     else:
         pts = list(plaintexts)
 
-    # build ciphertexts using provided alphabet and key
     try:
         polybius_map, _ = create_polybius_square(alphabet)
     except Exception:
@@ -1040,7 +906,6 @@ def break_cipher(
 
     ciphertexts = [encrypt_message(pt, polybius_map, column_key) for pt in pts]
 
-    # prepare cfg and inject candidate lengths if given
     cfg = CONFIG.copy()
     if key_lengths is not None:
         cfg["lengths"] = list(key_lengths)
@@ -1056,7 +921,6 @@ def break_cipher(
         test_alphabet=test_alphabet,
     )
 
-    # summarize and return
     print("\nBreak-cipher finished.")
     for r in updated_entry.get("results", []):
         print(f"  length={r.get('length')} key={r.get('key')} score={r.get('score')}")
@@ -1065,15 +929,16 @@ def break_cipher(
 
 if __name__ == "__main__":
 
-    plaintexts = [
-        "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOGS AND DARTS THROUGH THE MEADOW WHILE BIRDS SING SWEETLY IN THE TREES AND THE SUN SHINES BRIGHTLY ABOVE THE FIELD.",
-        "EVERY GOOD BOY DESERVES FUN AND EVERY GIRL SHOULD LEARN TO READ BOOKS DAILY TO EXPAND HER KNOWLEDGE, ENJOY LITERATURE, AND IMPROVE HER THINKING AND WISDOM.",
-        "PACK MY BOX WITH FIVE DOZEN LIQUOR BOTTLES CAREFULLY SO NONE BREAKS DURING TRANSPORTATION, AND MAKE SURE ALL LABELS ARE FACING THE CORRECT DIRECTION FOR EASY INSPECTION.",
-        "JUMPING FOXES AVOID THE HUNTER BY RUNNING THROUGH DENSE FORESTS, LEAPING OVER FENCES, AND HIDING IN SHRUBS WHILE THE SUN SETS AND SHADOWS STRETCH ACROSS THE HILLS AND VALLEYS.",
-        "IN THE SILENT NIGHT, STARS SPARKLE BRIGHTLY ABOVE THE QUIET VILLAGE, WHILE PEOPLE SLEEP PEACEFULLY, WINDS SWAY THE TREES, AND THE MOON CASTS SOFT LIGHT ACROSS THE FIELDS.",
-    ]
-
     # Example invocation: provide alphabet, key, plaintexts and optional key lengths
+
+    # plaintexts = [
+    #     "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOGS AND DARTS THROUGH THE MEADOW WHILE BIRDS SING SWEETLY IN THE TREES AND THE SUN SHINES BRIGHTLY ABOVE THE FIELD.",
+    #     "EVERY GOOD BOY DESERVES FUN AND EVERY GIRL SHOULD LEARN TO READ BOOKS DAILY TO EXPAND HER KNOWLEDGE, ENJOY LITERATURE, AND IMPROVE HER THINKING AND WISDOM.",
+    #     "PACK MY BOX WITH FIVE DOZEN LIQUOR BOTTLES CAREFULLY SO NONE BREAKS DURING TRANSPORTATION, AND MAKE SURE ALL LABELS ARE FACING THE CORRECT DIRECTION FOR EASY INSPECTION.",
+    #     "JUMPING FOXES AVOID THE HUNTER BY RUNNING THROUGH DENSE FORESTS, LEAPING OVER FENCES, AND HIDING IN SHRUBS WHILE THE SUN SETS AND SHADOWS STRETCH ACROSS THE HILLS AND VALLEYS.",
+    #     "IN THE SILENT NIGHT, STARS SPARKLE BRIGHTLY ABOVE THE QUIET VILLAGE, WHILE PEOPLE SLEEP PEACEFULLY, WINDS SWAY THE TREES, AND THE MOON CASTS SOFT LIGHT ACROSS THE FIELDS.",
+    # ]
+
     # break_cipher(
     #     alphabet="0ZDEFABCGHIJKLMNOPQRSTUVWXY123456789",
     #     column_key="MATHES",
