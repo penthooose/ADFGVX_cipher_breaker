@@ -2,6 +2,8 @@
 
 A Python implementation for encrypting, decrypting, and breaking the ADFGVX cipher using hill-climbing and n-gram scoring techniques.
 
+Related paper: [Breaking the ADFGVX Cipher — From Theory to Practical Cryptanalysis](docs/Breaking_the_ADFGVX_Cipher-From_Theory_to_Practical_Cryptanalysis.pdf) — the accompanying PDF is included in the `docs/` folder and explains the general approach, history, and algorithms of this project.
+
 ---
 
 ## Quick Start
